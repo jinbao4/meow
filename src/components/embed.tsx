@@ -41,6 +41,8 @@ interface GuildedEmbed {
 export function EmbedEditor() {
   const [embeds, setEmbeds] = useState<GuildedEmbed[]>([])
   const [content, setContent] = useState("")
+  const [username, setUsername] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("")
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [rawJson, setRawJson] = useState("")
@@ -90,7 +92,11 @@ export function EmbedEditor() {
       return updated
     })
   }
-
+  
+  function hexToDecimal(hex: string) {
+    return parseInt(hex.replace("#", ""), 16)
+  }
+  
   const addEmbed = () => {
     setEmbeds((prev) => [
       ...prev,
@@ -159,20 +165,44 @@ export function EmbedEditor() {
 
   const handleSend = async () => {
     if (!webhookUrl) {
-      showPopup("Webhook URL is required!", "error")
-      return
+      showPopup("Webhook URL is required!", "error");
+      return;
     }
+  
     try {
-      setIsSending(true)
-      await sendWebhook(webhookUrl, { content, embeds })
-      showPopup("Webhook sent successfully!", "success")
+      setIsSending(true);
+  
+      const res = await fetch("/api/send-webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          webhookUrl,
+          payload: {
+            content,
+            embeds,
+          },
+        }),
+      });
+  
+      const data = await res.json();
+  
+      if (!res.ok) {
+        throw new Error(data.error || "Unknown error sending webhook");
+      }
+  
+      showPopup("Webhook sent successfully!", "success");
     } catch (err: any) {
-      showPopup("Failed to send: " + (err.message || "Unknown error"), "error")
+      console.error("Webhook error:", err);
+      showPopup("Failed to send: " + (err.message || "Unknown error"), "error");
     } finally {
-      setIsSending(false)
+      setIsSending(false);
     }
-  }
-
+  };
+  
+  
+  
   const saveToStorage = () => {
     localStorage.setItem("guilded_embed_data", JSON.stringify({ content, embeds }))
     showPopup("Saved to local storage.", "success")
