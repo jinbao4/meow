@@ -1,48 +1,42 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
+import { CheckCircle, XCircle, X } from "lucide-react"
 
 interface PopupToastProps {
   message: string
-  type?: "success" | "error"
+  type: "success" | "error"
   onClose: () => void
 }
 
-export function PopupToast({ message, type = "success", onClose }: PopupToastProps) {
+export function PopupToast({ message, type, onClose }: PopupToastProps) {
+  const [isVisible, setIsVisible] = useState(true)
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      onClose()
-    }, 4000) // Auto close after 4 seconds
+      setIsVisible(false)
+      setTimeout(onClose, 300) // Allow time for fade-out animation
+    }, 3000)
 
     return () => clearTimeout(timer)
   }, [onClose])
 
   return (
     <div
-      className={`fixed bottom-6 right-6 z-50 p-4 rounded-lg shadow-lg flex items-center gap-4 text-white ${
-        type === "success" ? "bg-green-500" : "bg-red-500"
-      }`}
+      className={`fixed bottom-4 right-4 flex items-center gap-2 p-3 rounded-md shadow-lg transition-opacity duration-300 ${
+        isVisible ? "opacity-100" : "opacity-0"
+      } ${type === "success" ? "bg-green-600" : "bg-red-600"} text-white z-50`}
     >
-      <div className="flex-shrink-0">
-        {type === "success" ? (
-          <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        ) : (
-          <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        )}
-      </div>
-      <div className="flex-1">
-        <p className="font-bold">{type === "success" ? "Success" : "Error"}</p>
-        <p className="text-sm">{message}</p>
-      </div>
+      {type === "success" ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+      <span>{message}</span>
       <button
-        onClick={onClose}
-        className="text-white hover:text-gray-300"
+        onClick={() => {
+          setIsVisible(false)
+          setTimeout(onClose, 300)
+        }}
+        className="ml-2 p-1 rounded-full hover:bg-white/20"
       >
-        ✕
+        <X className="h-4 w-4" />
       </button>
     </div>
   )
