@@ -4,35 +4,17 @@ import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import {
-  Plus,
-  Trash2,
-  Copy,
-  Save,
-  Pencil,
-  FileText,
-  AlignLeft,
-  Send,
-  Palette,
-  Bookmark,
-  Wand2,
-  AlertTriangle,
-  Star,
-  Clock,
-  Sparkles,
-} from "lucide-react"
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
-import { ColorPicker } from "@/components/ui/color-picker"
+import { Plus, Trash2, Copy, Save, Send, Palette, Bookmark, Sparkles, Shield, Info } from "lucide-react"
 import { sendWebhook } from "@/lib/webhook"
 import { PopupToast } from "@/components/PopToast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ColorPicker } from "@/components/ui/color-picker"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +25,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface EmbedField {
   name: string
@@ -83,23 +64,23 @@ export function EmbedEditor() {
   const [username, setUsername] = useState("Gilhook")
   const [avatarUrl, setAvatarUrl] = useState("")
   const [webhookUrl, setWebhookUrl] = useState("")
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [rawJson, setRawJson] = useState("")
   const [activeTab, setActiveTab] = useState("content")
   const [isSending, setIsSending] = useState(false)
   const [popup, setPopup] = useState<{ message: string; type: "success" | "error" } | null>(null)
   const [previewTheme, setPreviewTheme] = useState<"dark" | "light">("dark")
   const [savedEmbeds, setSavedEmbeds] = useState<SavedEmbed[]>([])
-  const [showSavedEmbeds, setShowSavedEmbeds] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [pendingAction, setPendingAction] = useState<() => void | null>(() => null)
   const [saveEmbedName, setSaveEmbedName] = useState("")
   const [showSaveDialog, setShowSaveDialog] = useState(false)
-  const [savedFilter, setSavedFilter] = useState<"all" | "favorites">("all")
   const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null)
+  const [showSecurityInfo, setShowSecurityInfo] = useState(false)
+  const [focusedEmbedIndex, setFocusedEmbedIndex] = useState<number | null>(null)
+  const [focusedField, setFocusedField] = useState<string | null>(null)
+  const [activeEmbedTab, setActiveEmbedTab] = useState("basic")
 
-  // Load saved data
+  // Add an embed by default if none exist
   useEffect(() => {
     const savedData = localStorage.getItem("guilded_embed_data")
     if (savedData) {
@@ -114,7 +95,10 @@ export function EmbedEditor() {
         setHasUnsavedChanges(false)
       } catch (e) {
         console.error("Failed to load saved data", e)
+        addDefaultEmbed()
       }
+    } else {
+      addDefaultEmbed()
     }
 
     // Load saved embeds
@@ -128,9 +112,25 @@ export function EmbedEditor() {
     }
   }, [])
 
-  // Update JSON when data changes
+  // Add a default embed if none exist
+  const addDefaultEmbed = () => {
+    if (embeds.length === 0) {
+      setEmbeds([
+        {
+          title: "",
+          description: "",
+          color: "#F5C400",
+          timestamp: "",
+          author: { name: "", icon_url: "" },
+          footer: { text: "" },
+          fields: [],
+        },
+      ])
+    }
+  }
+
+  // Update when data changes
   useEffect(() => {
-    setRawJson(JSON.stringify({ content, embeds, username, avatar_url: avatarUrl }, null, 2))
     setHasUnsavedChanges(true)
   }, [content, embeds, username, avatarUrl])
 
@@ -176,16 +176,6 @@ export function EmbedEditor() {
   function hexToDecimal(hex: string) {
     if (!hex || typeof hex !== "string" || !hex.startsWith("#")) return hex
     return Number.parseInt(hex.replace("#", ""), 16)
-  }
-
-  function isValidUrl(url: string) {
-    if (!url) return false
-    try {
-      new URL(url)
-      return true
-    } catch {
-      return false
-    }
   }
 
   const addEmbed = () => {
@@ -305,24 +295,6 @@ export function EmbedEditor() {
     showPopup("Saved to local storage", "success")
   }
 
-  const handleSaveJson = () => {
-    try {
-      const parsed = JSON.parse(rawJson)
-      if (typeof parsed !== "object" || parsed === null) {
-        showPopup("Invalid JSON structure", "error")
-        return
-      }
-      setContent(parsed.content || "")
-      setEmbeds(parsed.embeds || [])
-      if (parsed.username) setUsername(parsed.username)
-      if (parsed.avatar_url) setAvatarUrl(parsed.avatar_url)
-      setDrawerOpen(false)
-      showPopup("Updated from JSON!", "success")
-    } catch (err: any) {
-      showPopup("Invalid JSON: " + err.message, "error")
-    }
-  }
-
   const showPopup = (message: string, type: "success" | "error") => {
     setPopup({ message, type })
   }
@@ -411,7 +383,6 @@ export function EmbedEditor() {
   const loadSavedEmbed = (savedEmbed: SavedEmbed) => {
     const confirmAction = () => {
       setEmbeds([savedEmbed.embed])
-      setShowSavedEmbeds(false)
       showPopup(`Loaded embed: ${savedEmbed.name}`, "success")
     }
 
@@ -449,32 +420,26 @@ export function EmbedEditor() {
     }
   }
 
-  // Filter saved embeds based on current filter
-  const filteredSavedEmbeds = savedFilter === "all" ? savedEmbeds : savedEmbeds.filter((embed) => embed.isFavorite)
-
   return (
-    <div
-      className="relative w-full max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-6"
-      style={{ borderRadius: "12px" }}
-    >
-      {/* Left Side - Editor */}
-      <div className="space-y-4">
-        <Card className="bg-[#1e1e24] border-0 transition-all shadow-lg">
-          <CardContent className="p-0">
+    <div className="w-full max-w-7xl mx-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-6">
+        {/* Left Side - Editor */}
+        <div className="space-y-4">
+          <div className="bg-[#1a1a1c] border-0 transition-all shadow-lg rounded-lg overflow-hidden">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="flex border-b border-[#3e3d45]">
+              <div className="flex border-b border-[#2a2a2c]">
                 <TabsList className="w-full bg-transparent h-auto rounded-none">
                   <TabsTrigger
                     value="content"
-                    className="flex-1 py-3 rounded-none data-[state=active]:bg-[#2a2a32] data-[state=active]:border-b-2 data-[state=active]:border-[#F5C400]"
+                    className="flex-1 py-3 rounded-none data-[state=active]:bg-[#2a2a32] data-[state=active]:border-b-2 data-[state=active]:border-[#F5C400] data-[state=inactive]:text-gray-400"
                   >
-                    <AlignLeft className="w-4 h-4 mr-2" /> Content
+                    Content
                   </TabsTrigger>
                   <TabsTrigger
                     value="embeds"
-                    className="flex-1 py-3 rounded-none data-[state=active]:bg-[#2a2a32] data-[state=active]:border-b-2 data-[state=active]:border-[#F5C400]"
+                    className="flex-1 py-3 rounded-none data-[state=active]:bg-[#2a2a32] data-[state=active]:border-b-2 data-[state=active]:border-[#F5C400] data-[state=inactive]:text-gray-400"
                   >
-                    <FileText className="w-4 h-4 mr-2" /> Embeds
+                    Embeds
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -489,7 +454,14 @@ export function EmbedEditor() {
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
                       rows={4}
-                      className="resize-none bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all"
+                      className={cn(
+                        "resize-none transition-all",
+                        focusedField === "content"
+                          ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                          : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                      )}
+                      onFocus={() => setFocusedField("content")}
+                      onBlur={() => setFocusedField(null)}
                     />
                   </div>
 
@@ -500,7 +472,14 @@ export function EmbedEditor() {
                         placeholder="Gilhook"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all"
+                        className={cn(
+                          "transition-all",
+                          focusedField === "username"
+                            ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                            : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                        )}
+                        onFocus={() => setFocusedField("username")}
+                        onBlur={() => setFocusedField(null)}
                       />
                     </div>
                     <div className="space-y-2">
@@ -509,18 +488,49 @@ export function EmbedEditor() {
                         placeholder="https://example.com/avatar.png"
                         value={avatarUrl}
                         onChange={(e) => setAvatarUrl(e.target.value)}
-                        className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all"
+                        className={cn(
+                          "transition-all",
+                          focusedField === "avatarUrl"
+                            ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                            : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                        )}
+                        onFocus={() => setFocusedField("avatarUrl")}
+                        onBlur={() => setFocusedField(null)}
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-gray-300">Webhook URL</Label>
+                    <div className="flex justify-between items-center">
+                      <Label className="text-gray-300">Webhook URL</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowSecurityInfo(true)}
+                              className="h-7 px-2 text-xs text-gray-400 hover:text-white"
+                            >
+                              <Shield className="h-3.5 w-3.5 mr-1" /> Security Info
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Learn about our security measures</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       placeholder="https://media.guilded.gg/webhooks/your-webhook-id"
                       value={webhookUrl}
                       onChange={(e) => setWebhookUrl(e.target.value)}
-                      className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all"
+                      className={cn(
+                        "transition-all",
+                        focusedField === "webhookUrl"
+                          ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                          : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                      )}
+                      onFocus={() => setFocusedField("webhookUrl")}
+                      onBlur={() => setFocusedField(null)}
                     />
                   </div>
                 </TabsContent>
@@ -529,174 +539,20 @@ export function EmbedEditor() {
                 <TabsContent value="embeds" className="space-y-4 mt-0">
                   <div className="flex justify-between items-center">
                     <div className="flex gap-2">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Popover open={showSavedEmbeds} onOpenChange={setShowSavedEmbeds}>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  className="bg-[#2a2a32] hover:bg-[#3e3d45] text-white border border-[#3e3d45] transition-all"
-                                  variant="outline"
-                                >
-                                  <Bookmark className="w-4 h-4 mr-2" /> Saved Embeds
-                                  {savedEmbeds.length > 0 && (
-                                    <Badge className="ml-2 bg-[#F5C400] text-black">{savedEmbeds.length}</Badge>
-                                  )}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-80 bg-[#2a2a32] border-[#3e3d45] p-0 shadow-xl">
-                                <div className="p-3 border-b border-[#4a4953] flex justify-between items-center">
-                                  <h3 className="font-medium text-white text-lg">Saved Embeds</h3>
-                                  <div className="flex gap-1 bg-[#1e1e24] rounded-md p-0.5">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className={cn(
-                                        "h-7 px-2 text-xs rounded-sm",
-                                        savedFilter === "all"
-                                          ? "bg-[#3e3d45] text-white"
-                                          : "text-gray-400 hover:text-white hover:bg-[#3e3d45]/50",
-                                      )}
-                                      onClick={() => setSavedFilter("all")}
-                                    >
-                                      All
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className={cn(
-                                        "h-7 px-2 text-xs rounded-sm",
-                                        savedFilter === "favorites"
-                                          ? "bg-[#3e3d45] text-white"
-                                          : "text-gray-400 hover:text-white hover:bg-[#3e3d45]/50",
-                                      )}
-                                      onClick={() => setSavedFilter("favorites")}
-                                    >
-                                      Favorites
-                                    </Button>
-                                  </div>
-                                </div>
-                                <div className="p-2 max-h-[300px] overflow-y-auto">
-                                  {filteredSavedEmbeds.length === 0 ? (
-                                    <div className="text-center py-8 px-4">
-                                      <Bookmark className="w-12 h-12 text-gray-500 mx-auto mb-2 opacity-50" />
-                                      <p className="text-gray-400 mb-1">
-                                        {savedFilter === "favorites" ? "No favorite embeds yet" : "No saved embeds yet"}
-                                      </p>
-                                      <p className="text-gray-500 text-sm">
-                                        {savedFilter === "favorites"
-                                          ? "Mark embeds as favorites to see them here"
-                                          : "Save your embeds for quick access later"}
-                                      </p>
-                                    </div>
-                                  ) : (
-                                    <div className="space-y-2">
-                                      {filteredSavedEmbeds.map((savedEmbed) => (
-                                        <div
-                                          key={savedEmbed.id}
-                                          className="flex items-center justify-between p-2 hover:bg-[#3e3d45] rounded-md transition-colors"
-                                        >
-                                          <div
-                                            className="flex-1 cursor-pointer"
-                                            onClick={() => loadSavedEmbed(savedEmbed)}
-                                          >
-                                            <div className="font-medium text-white flex items-center">
-                                              {savedEmbed.name}
-                                              {savedEmbed.isFavorite && (
-                                                <Star className="w-3.5 h-3.5 text-[#F5C400] ml-1 fill-[#F5C400]" />
-                                              )}
-                                            </div>
-                                            <div className="text-xs text-gray-400 flex items-center">
-                                              <Clock className="w-3 h-3 mr-1" />
-                                              {formatDate(savedEmbed.createdAt)}
-                                            </div>
-                                          </div>
-                                          <div className="flex gap-1">
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  className="h-7 w-7 text-gray-300 hover:text-white hover:bg-[#4a4953]"
-                                                  onClick={() => toggleFavorite(savedEmbed.id)}
-                                                >
-                                                  <Star
-                                                    className={cn(
-                                                      "h-3.5 w-3.5",
-                                                      savedEmbed.isFavorite
-                                                        ? "text-[#F5C400] fill-[#F5C400]"
-                                                        : "text-gray-400",
-                                                    )}
-                                                  />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent side="bottom">
-                                                {savedEmbed.isFavorite ? "Remove from favorites" : "Add to favorites"}
-                                              </TooltipContent>
-                                            </Tooltip>
+                      <Button onClick={addEmbed} className="bg-[#F5C400] hover:bg-[#D4A900] text-black">
+                        <Plus className="w-4 h-4 mr-2" /> Add Embed
+                      </Button>
 
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  className="h-7 w-7 text-gray-300 hover:text-white hover:bg-[#4a4953]"
-                                                  onClick={() => loadSavedEmbed(savedEmbed)}
-                                                >
-                                                  <FileText className="h-3.5 w-3.5" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent side="bottom">Load embed</TooltipContent>
-                                            </Tooltip>
-
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                                                  onClick={() => deleteSavedEmbed(savedEmbed.id)}
-                                                >
-                                                  <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent side="bottom">Delete embed</TooltipContent>
-                                            </Tooltip>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="p-3 border-t border-[#4a4953]">
-                                  <Button
-                                    className="w-full bg-[#F5C400] hover:bg-[#D4A900] text-black font-medium transition-all"
-                                    onClick={openSaveDialog}
-                                  >
-                                    <Save className="w-4 h-4 mr-2" /> Save Current Embed
-                                  </Button>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">Access your saved embeds</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              className="bg-[#2a2a32] hover:bg-[#3e3d45] text-white border border-[#3e3d45] transition-all"
-                              variant="outline"
-                              onClick={generateRandomEmbed}
-                            >
-                              <Wand2 className="w-4 h-4 mr-2" /> Generate
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">Generate a random embed template</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <Button
+                        className="bg-[#1a1a1c] hover:bg-[#2a2a2c] text-white"
+                        variant="outline"
+                        onClick={openSaveDialog}
+                      >
+                        <Bookmark className="w-4 h-4 mr-2" /> Saved
+                        {savedEmbeds.length > 0 && (
+                          <Badge className="ml-2 bg-[#F5C400] text-black">{savedEmbeds.length}</Badge>
+                        )}
+                      </Button>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -707,7 +563,7 @@ export function EmbedEditor() {
                               variant="outline"
                               size="sm"
                               onClick={() => setPreviewTheme(previewTheme === "dark" ? "light" : "dark")}
-                              className="h-8 bg-transparent border-[#3e3d45] text-white hover:bg-[#3e3d45] transition-all"
+                              className="h-8 bg-[#121214] border-[#2a2a2c] text-white hover:bg-[#2a2a2c]"
                             >
                               <Palette className="w-4 h-4 mr-2" />
                               {previewTheme === "dark" ? "Dark" : "Light"}
@@ -720,183 +576,258 @@ export function EmbedEditor() {
                   </div>
 
                   {embeds.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-[#4a4953] rounded-lg bg-[#1e1e1e]/30">
+                    <div className="text-center py-12 border border-dashed border-[#2a2a2c] rounded-lg bg-[#1a1a1c]">
                       <Sparkles className="w-12 h-12 text-[#F5C400] mx-auto mb-3 opacity-70" />
                       <p className="text-gray-300 mb-4 font-medium">No embeds yet. Create your first embed!</p>
-                      <Button
-                        onClick={addEmbed}
-                        className="bg-[#F5C400] hover:bg-[#D4A900] text-black transition-all font-medium"
-                      >
+                      <Button onClick={addEmbed} className="bg-[#F5C400] hover:bg-[#D4A900] text-black">
                         <Plus className="w-4 h-4 mr-2" /> Create Embed
                       </Button>
                     </div>
                   ) : (
-                    <>
+                    <div className="space-y-4">
                       {embeds.map((embed, index) => (
-                        <Card
+                        <div
                           key={index}
-                          className="bg-[#18181b] border-0 overflow-hidden transition-all rounded-md shadow-md"
+                          className={cn(
+                            "rounded-lg overflow-hidden transition-all border",
+                            focusedEmbedIndex === index
+                              ? "bg-[#1a1a1c] border-[#F5C400]"
+                              : "bg-[#121214] border-[#2a2a2c] opacity-90",
+                          )}
+                          onClick={() => setFocusedEmbedIndex(index)}
                         >
                           <div
                             className="h-2"
                             style={{ backgroundColor: embed.color || "#F5C400", width: "100%" }}
                           ></div>
-                          <div className="flex justify-between items-center p-3 border-b border-[#2a2a32]">
+
+                          <div className="px-4 py-3 flex justify-between items-center border-b border-[#2a2a2c]">
                             <div className="flex items-center gap-2">
                               <span className="text-base font-medium text-white">Embed {index + 1}</span>
                               <Badge
                                 variant="outline"
-                                className="bg-[#2a2a32] text-sm border-[#3e3d45] text-white px-3 py-1 rounded-full"
+                                className="bg-[#121214] text-xs border-[#2a2a2c] text-white px-2 py-0.5 rounded-full"
                               >
                                 {embed.color || "#F5C400"}
                               </Badge>
                             </div>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => removeEmbed(index)}
-                                    className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="left">Remove embed</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeEmbed(index)}
+                              className="h-7 w-7 text-gray-400 hover:text-red-400 hover:bg-red-900/20"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
 
-                          <CardContent className="p-4 space-y-4">
-                            <Tabs defaultValue="basic" className="w-full">
-                              <TabsList className="w-full grid grid-cols-5 mb-4 bg-[#2a2a32] rounded-md">
-                                <TabsTrigger value="basic" className="text-sm data-[state=active]:bg-[#3e3e3e] py-2">
+                          <div className="p-4">
+                            <Tabs value={activeEmbedTab} onValueChange={setActiveEmbedTab} className="w-full">
+                              <TabsList className="w-full bg-[#121214] rounded-md mb-4">
+                                <TabsTrigger
+                                  value="basic"
+                                  className="data-[state=active]:bg-[#2a2a2c] data-[state=active]:text-white data-[state=inactive]:text-gray-400"
+                                >
                                   Basic
                                 </TabsTrigger>
-                                <TabsTrigger value="author" className="text-sm data-[state=active]:bg-[#3e3e3e] py-2">
+                                <TabsTrigger
+                                  value="author"
+                                  className="data-[state=active]:bg-[#2a2a2c] data-[state=active]:text-white data-[state=inactive]:text-gray-400"
+                                >
                                   Author
                                 </TabsTrigger>
-                                <TabsTrigger value="fields" className="text-sm data-[state=active]:bg-[#3e3e3e] py-2">
+                                <TabsTrigger
+                                  value="fields"
+                                  className="data-[state=active]:bg-[#2a2a2c] data-[state=active]:text-white data-[state=inactive]:text-gray-400"
+                                >
                                   Fields
                                 </TabsTrigger>
-                                <TabsTrigger value="footer" className="text-sm data-[state=active]:bg-[#3e3e3e] py-2">
+                                <TabsTrigger
+                                  value="footer"
+                                  className="data-[state=active]:bg-[#2a2a2c] data-[state=active]:text-white data-[state=inactive]:text-gray-400"
+                                >
                                   Footer
                                 </TabsTrigger>
                                 <TabsTrigger
                                   value="appearance"
-                                  className="text-sm data-[state=active]:bg-[#3e3e3e] py-2"
+                                  className="data-[state=active]:bg-[#2a2a2c] data-[state=active]:text-white data-[state=inactive]:text-gray-400"
                                 >
                                   Appearance
                                 </TabsTrigger>
                               </TabsList>
 
                               {/* Basic Tab */}
-                              <TabsContent value="basic" className="space-y-5 mt-4">
+                              <TabsContent value="basic" className="space-y-4 mt-0">
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">Title</Label>
+                                  <Label className="text-white">Title</Label>
                                   <Input
                                     value={embed.title || ""}
                                     onChange={(e) => updateEmbed(index, "title", e.target.value)}
                                     placeholder="Embed title"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                    className={cn(
+                                      "transition-all",
+                                      focusedField === `${index}-title`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-title`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
+
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">Description</Label>
+                                  <Label className="text-white">Description</Label>
                                   <Textarea
                                     value={embed.description || ""}
                                     onChange={(e) => updateEmbed(index, "description", e.target.value)}
                                     placeholder="Embed description"
                                     rows={4}
-                                    className="resize-none bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all text-base"
+                                    className={cn(
+                                      "resize-none transition-all",
+                                      focusedField === `${index}-description`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-description`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
+
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">URL</Label>
+                                  <Label className="text-white">URL</Label>
                                   <Input
                                     value={embed.url || ""}
                                     onChange={(e) => updateEmbed(index, "url", e.target.value)}
                                     placeholder="https://example.com"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                    className={cn(
+                                      "transition-all",
+                                      focusedField === `${index}-url`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-url`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
-                                <div className="space-y-2 pb-6">
-                                  <Label className="text-white text-base">Timestamp</Label>
-                                  <Input
-                                    value={embed.timestamp || ""}
-                                    onChange={(e) => updateEmbed(index, "timestamp", e.target.value)}
-                                    placeholder="ISO timestamp"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base mb-2"
-                                  />
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => updateEmbed(index, "timestamp", new Date().toISOString())}
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white hover:bg-[#3e3e3e] h-10"
-                                  >
-                                    Set Current Time
-                                  </Button>
+
+                                <div className="space-y-2">
+                                  <Label className="text-white">Timestamp</Label>
+                                  <div className="flex gap-2">
+                                    <Input
+                                      value={embed.timestamp || ""}
+                                      onChange={(e) => updateEmbed(index, "timestamp", e.target.value)}
+                                      placeholder="ISO timestamp"
+                                      className={cn(
+                                        "transition-all flex-1",
+                                        focusedField === `${index}-timestamp`
+                                          ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                          : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                      )}
+                                      onFocus={() => setFocusedField(`${index}-timestamp`)}
+                                      onBlur={() => setFocusedField(null)}
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => updateEmbed(index, "timestamp", new Date().toISOString())}
+                                      className="bg-[#121214] border-[#2a2a2c] text-white hover:bg-[#2a2a2c]"
+                                    >
+                                      Set Current Time
+                                    </Button>
+                                  </div>
                                 </div>
                               </TabsContent>
 
                               {/* Author Tab */}
-                              <TabsContent value="author" className="space-y-5 mt-4">
+                              <TabsContent value="author" className="space-y-4 mt-0">
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">Author Name</Label>
+                                  <Label className="text-white">Author Name</Label>
                                   <Input
                                     value={embed.author?.name || ""}
                                     onChange={(e) => updateEmbed(index, "author.name", e.target.value)}
                                     placeholder="Author name"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                    className={cn(
+                                      "transition-all",
+                                      focusedField === `${index}-author-name`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-author-name`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
-                                <div className="space-y-2 pb-6">
-                                  <Label className="text-white text-base">Author Icon URL</Label>
+
+                                <div className="space-y-2">
+                                  <Label className="text-white">Author Icon URL</Label>
                                   <Input
                                     value={embed.author?.icon_url || ""}
                                     onChange={(e) => updateEmbed(index, "author.icon_url", e.target.value)}
                                     placeholder="https://example.com/avatar.png"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                    className={cn(
+                                      "transition-all",
+                                      focusedField === `${index}-author-icon`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-author-icon`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
                               </TabsContent>
 
                               {/* Fields Tab */}
-                              <TabsContent value="fields" className="space-y-5 mt-4">
+                              <TabsContent value="fields" className="space-y-4 mt-0">
                                 {embed.fields?.map((field, fieldIndex) => (
                                   <div
                                     key={fieldIndex}
-                                    className="space-y-2 border border-[#3e3d45] p-4 rounded-md bg-[#2a2a32] transition-all"
+                                    className="space-y-2 border border-[#2a2a2c] p-3 rounded-md bg-[#121214]"
                                   >
                                     <div className="flex justify-between items-center">
-                                      <Label className="text-white text-base">Field {fieldIndex + 1}</Label>
+                                      <Label className="text-white">Field {fieldIndex + 1}</Label>
                                       <Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => removeField(index, fieldIndex)}
-                                        className="h-8 w-8 text-red-400 hover:text-red-300"
+                                        className="h-7 w-7 text-gray-400 hover:text-red-400"
                                       >
-                                        <Trash2 className="h-4 w-4" />
+                                        <Trash2 className="h-3.5 w-3.5" />
                                       </Button>
                                     </div>
+
                                     <Input
                                       value={field.name}
                                       onChange={(e) => updateField(index, fieldIndex, "name", e.target.value)}
                                       placeholder="Field name"
-                                      className="bg-[#18181b] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                      className={cn(
+                                        "transition-all",
+                                        focusedField === `${index}-field-${fieldIndex}-name`
+                                          ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                          : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                      )}
+                                      onFocus={() => setFocusedField(`${index}-field-${fieldIndex}-name`)}
+                                      onBlur={() => setFocusedField(null)}
                                     />
+
                                     <Input
                                       value={field.value}
                                       onChange={(e) => updateField(index, fieldIndex, "value", e.target.value)}
                                       placeholder="Field value"
-                                      className="bg-[#18181b] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                      className={cn(
+                                        "transition-all",
+                                        focusedField === `${index}-field-${fieldIndex}-value`
+                                          ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                          : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                      )}
+                                      onFocus={() => setFocusedField(`${index}-field-${fieldIndex}-value`)}
+                                      onBlur={() => setFocusedField(null)}
                                     />
+
                                     <div className="flex items-center space-x-2">
                                       <Switch
                                         checked={field.inline || false}
                                         onCheckedChange={(checked) => updateField(index, fieldIndex, "inline", checked)}
                                       />
-                                      <Label className="text-white">Inline</Label>
+                                      <Label className="text-gray-300">Inline</Label>
                                     </div>
                                   </div>
                                 ))}
@@ -904,29 +835,36 @@ export function EmbedEditor() {
                                 <Button
                                   variant="outline"
                                   onClick={() => addField(index)}
-                                  className="w-full bg-[#2a2a32] border-[#3e3d45] text-white hover:bg-[#3e3e3e] h-10"
+                                  className="w-full bg-[#121214] border-[#2a2a2c] text-white hover:bg-[#2a2a2c]"
                                 >
                                   <Plus className="w-4 h-4 mr-2" /> Add Field
                                 </Button>
                               </TabsContent>
 
                               {/* Footer Tab */}
-                              <TabsContent value="footer" className="space-y-5 mt-4 pb-6">
+                              <TabsContent value="footer" className="space-y-4 mt-0">
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">Footer Text</Label>
+                                  <Label className="text-white">Footer Text</Label>
                                   <Input
                                     value={embed.footer?.text || ""}
                                     onChange={(e) => updateEmbed(index, "footer.text", e.target.value)}
                                     placeholder="Footer text"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                    className={cn(
+                                      "transition-all",
+                                      focusedField === `${index}-footer`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-footer`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
                               </TabsContent>
 
                               {/* Appearance Tab */}
-                              <TabsContent value="appearance" className="space-y-5 mt-4 pb-6">
+                              <TabsContent value="appearance" className="space-y-4 mt-0">
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">Color</Label>
+                                  <Label className="text-white">Color</Label>
                                   <div className="flex gap-3 items-center">
                                     <ColorPicker
                                       value={embed.color || "#F5C400"}
@@ -938,345 +876,373 @@ export function EmbedEditor() {
                                       value={embed.color || "#F5C400"}
                                       onChange={(e) => updateEmbed(index, "color", e.target.value)}
                                       placeholder="#F5C400"
-                                      className="w-32 bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                      className={cn(
+                                        "w-32 transition-all",
+                                        focusedField === `${index}-color`
+                                          ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                          : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                      )}
+                                      onFocus={() => setFocusedField(`${index}-color`)}
+                                      onBlur={() => setFocusedField(null)}
                                     />
-                                    <div className="text-sm text-white">
+                                    <div className="text-sm text-gray-300">
                                       Decimal: {hexToDecimal(embed.color || "#F5C400")}
                                     </div>
                                   </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">Image URL</Label>
+                                  <Label className="text-white">Image URL</Label>
                                   <Input
                                     value={embed.image || ""}
                                     onChange={(e) => updateEmbed(index, "image", e.target.value)}
                                     placeholder="https://example.com/image.png"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                    className={cn(
+                                      "transition-all",
+                                      focusedField === `${index}-image`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-image`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
 
                                 <div className="space-y-2">
-                                  <Label className="text-white text-base">Thumbnail URL</Label>
+                                  <Label className="text-white">Thumbnail URL</Label>
                                   <Input
                                     value={embed.thumbnail || ""}
                                     onChange={(e) => updateEmbed(index, "thumbnail", e.target.value)}
                                     placeholder="https://example.com/thumbnail.png"
-                                    className="bg-[#2a2a32] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400] transition-all h-12 text-base"
+                                    className={cn(
+                                      "transition-all",
+                                      focusedField === `${index}-thumbnail`
+                                        ? "bg-[#2a2a2c] border-[#F5C400] text-white"
+                                        : "bg-[#121214] border-[#2a2a2c] text-gray-300",
+                                    )}
+                                    onFocus={() => setFocusedField(`${index}-thumbnail`)}
+                                    onBlur={() => setFocusedField(null)}
                                   />
                                 </div>
                               </TabsContent>
                             </Tabs>
-                          </CardContent>
-                        </Card>
+                          </div>
+                        </div>
                       ))}
-
-                      <Button
-                        onClick={addEmbed}
-                        className="w-full bg-[#F5C400] hover:bg-[#D4A900] text-black transition-all h-10 mt-2 font-medium"
-                      >
-                        <Plus className="w-4 h-4 mr-2" /> Add Embed
-                      </Button>
-                    </>
+                    </div>
                   )}
                 </TabsContent>
               </div>
             </Tabs>
-          </CardContent>
 
-          {/* Footer Buttons */}
-          <CardFooter className="flex flex-wrap gap-2 justify-between p-4 border-t border-[#3e3d45] bg-[#1e1e24]">
-            <div className="flex gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={handleSend}
-                      disabled={isSending}
-                      className="bg-[#F5C400] hover:bg-[#D4A900] text-black transition-all font-medium"
-                    >
-                      {isSending ? (
-                        <div className="flex items-center gap-2">
-                          <svg
-                            className="animate-spin h-4 w-4 text-black"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                          </svg>
-                          Sending...
+            {/* Footer Buttons */}
+            <div className="flex flex-wrap gap-2 justify-between p-4 border-t border-[#2a2a2c] bg-[#1a1a1c] rounded-b-lg">
+              <div className="flex gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={handleSend}
+                        disabled={isSending}
+                        className="bg-[#F5C400] hover:bg-[#D4A900] text-black transition-all font-medium"
+                      >
+                        {isSending ? (
+                          <div className="flex items-center gap-2">
+                            <svg
+                              className="animate-spin h-4 w-4 text-black"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              ></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                            </svg>
+                            Sending...
+                          </div>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-2" /> Send
+                          </>
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Send webhook to Guilded</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={saveToStorage}
+                        className="bg-[#1a1a1c] hover:bg-[#2a2a2c] text-white border border-[#2a2a2c] transition-all"
+                        variant="outline"
+                      >
+                        <Save className="w-4 h-4 mr-2" /> Save
+                        {hasUnsavedChanges && <div className="w-1.5 h-1.5 rounded-full bg-[#F5C400] ml-2"></div>}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {lastSavedTime ? (
+                        <div className="text-xs">
+                          Last saved: {formatDate(lastSavedTime)} at {formatTime(lastSavedTime)}
                         </div>
                       ) : (
-                        <>
-                          <Send className="w-4 h-4 mr-2" /> Send
-                        </>
+                        "Save your work"
                       )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Send webhook to Guilded</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={saveToStorage}
-                      className="bg-[#2a2a32] hover:bg-[#3e3d45] text-white border border-[#3e3d45] transition-all"
-                      variant="outline"
-                    >
-                      <Save className="w-4 h-4 mr-2" /> Save
-                      {hasUnsavedChanges && <div className="w-1.5 h-1.5 rounded-full bg-[#F5C400] ml-2"></div>}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {lastSavedTime ? (
-                      <div className="text-xs">
-                        Last saved: {formatDate(lastSavedTime)} at {formatTime(lastSavedTime)}
-                      </div>
-                    ) : (
-                      "Save your work"
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-
-            <div className="flex gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      onClick={copyJson}
-                      className="border-[#3e3d45] bg-[#2a2a32] hover:bg-[#3e3d45] text-gray-300 transition-all"
-                    >
-                      <Copy className="w-4 h-4 mr-2" /> Copy JSON
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Copy webhook JSON to clipboard</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      onClick={() => setDrawerOpen(true)}
-                      className="border-[#3e3d45] bg-[#2a2a32] hover:bg-[#3e3d45] text-gray-300 transition-all"
-                    >
-                      <Pencil className="w-4 h-4 mr-2" /> Edit Raw JSON
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Edit webhook as raw JSON</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </CardFooter>
-        </Card>
-      </div>
-
-      {/* Right Side - Preview */}
-      <Card
-        className={cn(
-          "overflow-hidden transition-all border-0 shadow-lg",
-          previewTheme === "dark" ? "bg-[#2e2d33] border-gray-800" : "bg-white border-gray-200",
-        )}
-      >
-        <div className={cn("p-3 flex items-center gap-3", previewTheme === "dark" ? "bg-[#2e2d33]" : "bg-white")}>
-          <Avatar className="h-10 w-10 border-0">
-            {avatarUrl ? (
-              <AvatarImage src={avatarUrl || "/placeholder.svg"} alt={username || "Gilhook"} />
-            ) : (
-              <AvatarFallback className="bg-[#F5C400] text-black font-bold">
-                {(username || "Gilhook").charAt(0)}
-              </AvatarFallback>
-            )}
-          </Avatar>
-          <div className="flex items-center gap-2">
-            <span className={cn("font-medium", previewTheme === "dark" ? "text-white" : "text-gray-800")}>
-              {username || "Gilhook"}
-            </span>
-            <span className={cn("text-sm", previewTheme === "dark" ? "text-gray-400" : "text-gray-500")}>
-              {formatDate(new Date()).split(",")[0]}
-            </span>
-            <span
-              className={cn(
-                "text-xs font-medium px-2 py-0.5 rounded uppercase tracking-wide",
-                previewTheme === "dark" ? "bg-[#3e3d45] text-white" : "bg-gray-200 text-gray-700",
-              )}
-            >
-              WEBHOOK
-            </span>
-          </div>
-        </div>
-        <CardContent className={cn("p-0 text-white", previewTheme === "dark" ? "bg-[#2e2d33]" : "bg-white")}>
-          {/* Content */}
-          {content && (
-            <div className={cn("px-4 py-3", previewTheme === "dark" ? "text-[#e5e5e6]" : "text-gray-700")}>
-              {content}
-            </div>
-          )}
-
-          {/* No Embeds */}
-          {embeds.length === 0 && (
-            <div className="text-center py-10">
-              <p className={previewTheme === "dark" ? "text-gray-400" : "text-gray-500"}>No embeds to preview</p>
-            </div>
-          )}
-
-          {/* Embeds Preview */}
-          {embeds.map((embed, index) => (
-            <div
-              key={index}
-              className={cn(
-                "mx-4 mb-3 rounded-[3px] overflow-hidden flex",
-                previewTheme === "dark" ? "bg-[#36353d]" : "bg-gray-100",
-              )}
-            >
-              {/* Left color bar */}
-              <div className="w-1.5 flex-shrink-0" style={{ backgroundColor: embed.color || "#F5C400" }}></div>
-
-              <div className="flex-grow">
-                {/* Author */}
-                {embed.author?.name && (
-                  <div className="flex items-center gap-2 px-4 pt-3">
-                    {embed.author.icon_url && (
-                      <img
-                        src={embed.author.icon_url || "/placeholder.svg"}
-                        alt="Author"
-                        className="w-5 h-5 rounded-full object-cover"
-                      />
-                    )}
-                    <span
-                      className={cn("font-medium text-sm", previewTheme === "dark" ? "text-white" : "text-gray-800")}
-                    >
-                      {embed.author.name}
-                    </span>
-                  </div>
-                )}
-
-                {/* Title */}
-                {embed.title && (
-                  <div className="px-4 pt-2">
-                    <a
-                      href={embed.url || "#"}
-                      className={cn(
-                        "font-bold text-lg",
-                        previewTheme === "dark" ? "text-white hover:underline" : "text-gray-800 hover:underline",
-                      )}
-                    >
-                      {embed.title}
-                    </a>
-                  </div>
-                )}
-
-                {/* Description */}
-                {embed.description && (
-                  <div
-                    className={cn(
-                      "px-4 pt-2 whitespace-pre-line",
-                      previewTheme === "dark" ? "text-[#e5e5e6]" : "text-gray-700",
-                    )}
-                  >
-                    {embed.description}
-                  </div>
-                )}
-
-                {/* Image */}
-                {embed.image && (
-                  <div className="px-4 pt-3">
-                    <img
-                      src={embed.image || "/placeholder.svg"}
-                      alt="Embed image"
-                      className="rounded-[3px] max-w-full max-h-[300px] object-cover"
-                    />
-                  </div>
-                )}
-
-                {/* Thumbnail */}
-                {embed.thumbnail && (
-                  <div className="float-right ml-4 mt-2 px-4">
-                    <img
-                      src={embed.thumbnail || "/placeholder.svg"}
-                      alt="Thumbnail"
-                      className="rounded-[3px] max-w-[80px] max-h-[80px] object-cover"
-                    />
-                  </div>
-                )}
-
-                {/* Fields */}
-                {embed.fields && embed.fields.length > 0 && (
-                  <div className="px-4 pt-3 grid grid-cols-1 gap-3">
-                    {embed.fields.map((field, idx) => (
-                      <div key={idx} className={field.inline ? "inline-block mr-4" : "block"}>
-                        <div className={cn("font-semibold", previewTheme === "dark" ? "text-white" : "text-gray-800")}>
-                          {field.name}
-                        </div>
-                        <div className={cn(previewTheme === "dark" ? "text-[#c7c7c9]" : "text-gray-600")}>
-                          {field.value}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Footer */}
-                {(embed.footer?.text || embed.timestamp) && (
-                  <div
-                    className={cn(
-                      "px-4 py-3 mt-2 text-xs",
-                      previewTheme === "dark" ? "text-[#9b9b9b]" : "text-gray-500",
-                    )}
-                  >
-                    {embed.footer?.text && <span>{embed.footer.text}</span>}
-                    {embed.footer?.text && embed.timestamp && <span className="mx-1">•</span>}
-                    {embed.timestamp && <span>{formatDate(embed.timestamp).split(",")[0]}</span>}
-                  </div>
-                )}
+              <div className="flex gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        onClick={copyJson}
+                        className="border-[#2a2a2c] bg-[#1a1a1c] hover:bg-[#2a2a2c] text-gray-300 transition-all"
+                      >
+                        <Copy className="w-4 h-4 mr-2" /> Copy JSON
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Copy webhook JSON to clipboard</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Drawer for Raw JSON */}
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DrawerContent className="bg-[#1e1e24] border-t border-[#3e3d45]">
-          <DrawerHeader>
-            <DrawerTitle className="text-white">Edit Raw JSON</DrawerTitle>
-          </DrawerHeader>
-          <div className="p-4 space-y-4">
-            <Textarea
-              value={rawJson}
-              onChange={(e) => setRawJson(e.target.value)}
-              className="h-[400px] font-mono text-sm bg-[#2a2a32] border-[#3e3d45] text-white"
-            />
           </div>
-          <DrawerFooter>
-            <Button onClick={handleSaveJson} className="bg-[#F5C400] hover:bg-[#D4A900] text-black font-medium">
-              Save Changes
-            </Button>
-            <Button variant="outline" onClick={() => setDrawerOpen(false)} className="border-[#3e3d45] text-gray-300">
-              Cancel
-            </Button>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+        </div>
 
-      {/* Save Embed Dialog */}
+        {/* Right Side - Preview */}
+        <div
+          className={cn(
+            "rounded-lg overflow-hidden transition-all border border-[#2a2a2c]",
+            previewTheme === "dark" ? "bg-[#1a1a1c]" : "bg-white",
+          )}
+        >
+          <div className={cn("p-3 flex items-center gap-3", previewTheme === "dark" ? "bg-[#1a1a1c]" : "bg-white")}>
+            <Avatar className="h-10 w-10 border-0">
+              {avatarUrl ? (
+                <AvatarImage src={avatarUrl || "/placeholder.svg"} alt={username || "Gilhook"} />
+              ) : (
+                <AvatarFallback className="bg-[#F5C400] text-black font-bold">
+                  {(username || "Gilhook").charAt(0)}
+                </AvatarFallback>
+              )}
+            </Avatar>
+            <div className="flex items-center gap-2">
+              <span className={cn("font-medium", previewTheme === "dark" ? "text-white" : "text-gray-800")}>
+                {username || "Gilhook"}
+              </span>
+              <span className={cn("text-sm", previewTheme === "dark" ? "text-gray-400" : "text-gray-500")}>
+                {formatDate(new Date()).split(",")[0]}
+              </span>
+              <span
+                className={cn(
+                  "text-xs font-medium px-2 py-0.5 rounded uppercase tracking-wide",
+                  previewTheme === "dark" ? "bg-[#2a2a2c] text-white" : "bg-gray-200 text-gray-700",
+                )}
+              >
+                WEBHOOK
+              </span>
+            </div>
+          </div>
+
+          <div className={cn("p-0", previewTheme === "dark" ? "bg-[#1a1a1c]" : "bg-white")}>
+            {/* Content */}
+            {content && (
+              <div className={cn("px-4 py-3", previewTheme === "dark" ? "text-[#e5e5e6]" : "text-gray-700")}>
+                {content}
+              </div>
+            )}
+
+            {/* No Embeds */}
+            {embeds.length === 0 && (
+              <div className="text-center py-10">
+                <p className={previewTheme === "dark" ? "text-gray-400" : "text-gray-500"}>No embeds to preview</p>
+              </div>
+            )}
+
+            {/* Embeds Preview */}
+            {embeds.map((embed, index) => (
+              <div
+                key={index}
+                className={cn(
+                  "mx-4 mb-3 rounded-[3px] overflow-hidden flex",
+                  previewTheme === "dark" ? "bg-[#2a2a2c]" : "bg-gray-100",
+                )}
+              >
+                {/* Left color bar */}
+                <div className="w-1 flex-shrink-0" style={{ backgroundColor: embed.color || "#F5C400" }}></div>
+
+                <div className="flex-grow p-3">
+                  {/* Author */}
+                  {embed.author?.name && (
+                    <div className="flex items-center gap-2 mb-2">
+                      {embed.author.icon_url && (
+                        <img
+                          src={embed.author.icon_url || "/placeholder.svg"}
+                          alt="Author"
+                          className="w-5 h-5 rounded-full object-cover"
+                        />
+                      )}
+                      <span
+                        className={cn("font-medium text-sm", previewTheme === "dark" ? "text-white" : "text-gray-800")}
+                      >
+                        {embed.author.name}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Title */}
+                  {embed.title && (
+                    <div className="mb-1">
+                      <a
+                        href={embed.url || "#"}
+                        className={cn(
+                          "font-bold text-lg",
+                          previewTheme === "dark" ? "text-white hover:underline" : "text-gray-800 hover:underline",
+                        )}
+                      >
+                        {embed.title}
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Description */}
+                  {embed.description && (
+                    <div
+                      className={cn(
+                        "whitespace-pre-line mb-2",
+                        previewTheme === "dark" ? "text-[#e5e5e6]" : "text-gray-700",
+                      )}
+                    >
+                      {embed.description}
+                    </div>
+                  )}
+
+                  {/* Fields */}
+                  {embed.fields && embed.fields.length > 0 && (
+                    <div className="grid grid-cols-1 gap-2 mb-2">
+                      {embed.fields.map((field, idx) => (
+                        <div key={idx} className={field.inline ? "inline-block mr-4" : "block"}>
+                          <div
+                            className={cn("font-semibold", previewTheme === "dark" ? "text-white" : "text-gray-800")}
+                          >
+                            {field.name}
+                          </div>
+                          <div className={cn(previewTheme === "dark" ? "text-[#c7c7c9]" : "text-gray-600")}>
+                            {field.value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Image */}
+                  {embed.image && (
+                    <div className="mt-2 mb-2">
+                      <img
+                        src={embed.image || "/placeholder.svg"}
+                        alt="Embed image"
+                        className="rounded-[3px] max-w-full max-h-[300px] object-cover"
+                      />
+                    </div>
+                  )}
+
+                  {/* Thumbnail */}
+                  {embed.thumbnail && (
+                    <div className="float-right ml-4 mt-0">
+                      <img
+                        src={embed.thumbnail || "/placeholder.svg"}
+                        alt="Thumbnail"
+                        className="rounded-[3px] max-w-[80px] max-h-[80px] object-cover"
+                      />
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  {(embed.footer?.text || embed.timestamp) && (
+                    <div className={cn("mt-2 text-xs", previewTheme === "dark" ? "text-[#9b9b9b]" : "text-gray-500")}>
+                      {embed.footer?.text && <span>{embed.footer.text}</span>}
+                      {embed.footer?.text && embed.timestamp && <span className="mx-1">•</span>}
+                      {embed.timestamp && <span>{formatDate(embed.timestamp).split(",")[0]}</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Popup Toast */}
+      {popup && <PopupToast message={popup.message} type={popup.type} onClose={() => setPopup(null)} />}
+
+      {/* Security Info Dialog */}
+      <AlertDialog open={showSecurityInfo} onOpenChange={setShowSecurityInfo}>
+        <AlertDialogContent className="bg-[#1a1a1c] border-[#2a2a2c] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <Shield className="h-5 w-5 text-[#F5C400]" /> Security Information
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-300">
+              Gilhook is designed with security in mind. Here's how we protect your data:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-white font-medium flex items-center gap-2">
+                <Info className="h-4 w-4 text-[#F5C400]" /> Client-Side Processing
+              </h3>
+              <p className="text-gray-300 text-sm">
+                All webhook requests are sent directly from your browser to Guilded. We never store or process your
+                webhook URLs or data on any server.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-white font-medium flex items-center gap-2">
+                <Info className="h-4 w-4 text-[#F5C400]" /> Rate Limiting
+              </h3>
+              <p className="text-gray-300 text-sm">
+                We implement client-side rate limiting to prevent abuse. You can send up to 5 webhook requests per
+                minute.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-white font-medium flex items-center gap-2">
+                <Info className="h-4 w-4 text-[#F5C400]" /> Local Storage Only
+              </h3>
+              <p className="text-gray-300 text-sm">
+                Your embeds and settings are saved only in your browser's local storage. Nothing is sent to our servers.
+              </p>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogAction
+              onClick={() => setShowSecurityInfo(false)}
+              className="bg-[#F5C400] text-black hover:bg-[#D4A900] font-medium"
+            >
+              Got it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Save Dialog */}
       <AlertDialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
-        <AlertDialogContent className="bg-[#2a2a32] border-[#3e3d45] text-white">
+        <AlertDialogContent className="bg-[#1a1a1c] border-[#2a2a2c] text-white">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white flex items-center gap-2">
               <Save className="h-5 w-5 text-[#F5C400]" /> Save Embed
@@ -1290,12 +1256,12 @@ export function EmbedEditor() {
               placeholder="My awesome embed"
               value={saveEmbedName}
               onChange={(e) => setSaveEmbedName(e.target.value)}
-              className="bg-[#1e1e24] border-[#3e3d45] text-white focus:border-[#F5C400] focus:ring-[#F5C400]"
+              className="bg-[#121214] border-[#2a2a2c] text-white focus:border-[#F5C400] focus:ring-[#F5C400]"
               autoFocus
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-[#3e3d45] text-white hover:bg-[#4a4953] border-[#4a4953]">
+            <AlertDialogCancel className="bg-[#2a2a2c] text-white hover:bg-[#3a3a3c] border-[#3a3a3c]">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
@@ -1310,17 +1276,15 @@ export function EmbedEditor() {
 
       {/* Unsaved Changes Dialog */}
       <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
-        <AlertDialogContent className="bg-[#2a2a32] border-[#3e3d45] text-white">
+        <AlertDialogContent className="bg-[#1a1a1c] border-[#2a2a2c] text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-[#F5C400]" /> Unsaved Changes
-            </AlertDialogTitle>
+            <AlertDialogTitle className="text-white">Unsaved Changes</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-300">
               You have unsaved changes that will be lost. Do you want to continue without saving?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-[#3e3d45] text-white hover:bg-[#4a4953] border-[#4a4953]">
+            <AlertDialogCancel className="bg-[#2a2a2c] text-white hover:bg-[#3a3a3c] border-[#3a3a3c]">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
@@ -1332,9 +1296,6 @@ export function EmbedEditor() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Popup Toast */}
-      {popup && <PopupToast message={popup.message} type={popup.type} onClose={() => setPopup(null)} />}
     </div>
   )
 }

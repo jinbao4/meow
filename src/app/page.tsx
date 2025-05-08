@@ -1,28 +1,33 @@
+"use client"
+
 import { Header } from "@/components/header"
 import { EmbedEditor } from "@/components/embed"
+import { ThemeProvider } from "@/components/theme-provider"
+import { SafetyInfo } from "@/components/safety-info"
 
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <Header />
-      <main className="flex-1 flex flex-col items-center justify-start py-12 px-6">
-        <div className="w-full max-w-7xl flex flex-col items-center gap-8">
-          {/* Title */}
-          <div className="text-center">
-            <h1 className="text-5xl font-extrabold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 to-yellow-700 dark:from-yellow-300 dark:to-yellow-500">
-              Guilded Embed Creator
-            </h1>
-          </div>
-
-          {/* Embed Editor */}
+    <ThemeProvider defaultTheme="dark" storageKey="gilhook-theme">
+      <div className="min-h-screen bg-[#121214] text-white flex flex-col">
+        <Header />
+        <main className="flex-grow container mx-auto px-4 py-4">
           <EmbedEditor />
-        </div>
-      </main>
-
-      {/* Footer right here */}
-      <footer className="w-full border-t mt-12 py-6 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} Gilhook. Built with ❤️ for the Guilded community.
-      </footer>
-    </div>
+        </main>
+        <footer className="w-full border-t border-yellow-800/20 py-3 text-center text-xs text-muted-foreground">
+          <div className="container mx-auto flex flex-col items-center gap-2">
+            <div className="flex items-center gap-4">
+              <SafetyInfo />
+              <a href="#" className="text-xs hover:text-yellow-400 transition-colors">
+                Terms of Service
+              </a>
+              <a href="#" className="text-xs hover:text-yellow-400 transition-colors">
+                Contact
+              </a>
+            </div>
+            <div>© {new Date().getFullYear()} Gilhook. Built for the Guilded community.</div>
+          </div>
+        </footer>
+      </div>
+    </ThemeProvider>
   )
 }
